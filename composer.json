@@ -1,5 +1,5 @@
 {
-    "name": "erorus/casc",
+    "name": "luzifix/casc",
     "description": "CASC extractor for World of Warcraft data",
     "type": "project",
     "license": "Apache-2.0",
@@ -10,10 +10,11 @@
         }
     ],
     "minimum-stability": "dev",
+    "prefer-stable": true,
     "repositories": [
         {
-            "type": "vcs",
-            "url": "https://github.com/erorus/db2"
+            "type": "git",
+            "url": "https://github.com/erorus/db2.git"
         }
     ],
     "autoload": {
@@ -22,7 +23,7 @@
         }
     },
     "require": {
-        "php-64bit": "^7.2",
+        "php": ">=7.2",
         "ext-curl": "*",
         "ext-zlib": "*",
         "erorus/db2": "*",
