@@ -8,7 +8,6 @@ use Erorus\CASC\Manifest\Install;
 use Erorus\CASC\Manifest\Root;
 use Erorus\CASC\VersionConfig\HTTP as HTTPVersionConfig;
 use Erorus\CASC\VersionConfig\Ribbit;
-use Erorus\DB2\Reader;
 
 /**
  * The main entry point of this library, you instantiate an NGDP object to extract files from CASC/TACT.
@@ -203,8 +202,7 @@ class NGDP {
 
         echo "Loading encryption keys..";
         try {
-            $added = $this->fetchTactKey();
-            $added += $this->downloadTactKeys();
+            $added = $this->downloadTactKeys();
             echo sprintf(" OK (+%d)\n", $added);
         } catch (\Exception $e) {
             echo " Failed: ", $e->getMessage(), "\n";
@@ -263,74 +261,6 @@ class NGDP {
         if ($keys) {
             BLTE::loadEncryptionKeys($keys);
         }
-
-        return count($keys);
-    }
-
-    /**
-     * Downloads the tactKey DB2 files and adds their keys to our list of known encryption keys.
-     *
-     * @return int How many keys we added.
-     */
-    private function fetchTactKey(): int {
-        $files = [
-            'tactKey' => 1302850,
-            'tactKeyLookup' => 1302851,
-        ];
-
-        /**
-         * Converts an array of numbers into a string of ascii characters.
-         *
-         * @param int[] $bytes
-         * @return string
-         */
-        $byteArrayToString = function (array $bytes): string {
-            $str = '';
-            for ($x = 0; $x < count($bytes); $x++) {
-                $str .= chr($bytes[$x]);
-            }
-
-            return $str;
-        };
-
-        /** @var Reader[] $db2s */
-        $db2s = [];
-
-        foreach ($files as $id => $path) {
-            $contentHash = $this->nameSources['Root']->getContentHash($path, null);
-            if (!$contentHash) {
-                throw new \Exception("Could not find $id file");
-            }
-
-            $cachePath = 'keys/' . bin2hex($contentHash);
-            $fullCachePath = $this->cache->getFullPath($cachePath);
-            if (!$this->cache->fileExists($cachePath)) {
-                $success = $this->fetchContentHash($contentHash, $fullCachePath);
-                if (!$success) {
-                    $this->cache->delete($cachePath);
-
-                    throw new \Exception("Could not fetch $id file");
-                }
-            }
-
-            try {
-                $db2s[$id] = new Reader($fullCachePath);
-            } catch (\Exception $e) {
-                $this->cache->delete($cachePath);
-
-                throw new \Exception("Could not open $id file: " . $e->getMessage());
-            }
-        }
-
-        $keys = [];
-        foreach ($db2s['tactKeyLookup']->generateRecords() as $id => $lookupRec) {
-            $keyRec = $db2s['tactKey']->getRecord($id);
-            if ($keyRec) {
-                $keys[$byteArrayToString($lookupRec[0])] = $byteArrayToString($keyRec[0]);
-            }
-        }
-
-        BLTE::loadEncryptionKeys($keys);
 
         return count($keys);
     }
