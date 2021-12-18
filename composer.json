@@ -1,6 +1,7 @@
 {
     "name": "luzifix/casc",
     "description": "CASC extractor for World of Warcraft data",
+    "version": "1.0.0",
     "type": "project",
     "license": "Apache-2.0",
     "authors": [
