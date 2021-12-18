@@ -26,7 +26,7 @@
         "php": ">=7.2",
         "ext-curl": "*",
         "ext-zlib": "*",
-        "luzifix/db2": "*",
+        "luzifix/db2": "dev-master",
         "zbateson/mail-mime-parser": "dev-master"
     }
 }
