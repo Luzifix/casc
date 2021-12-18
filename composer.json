@@ -12,12 +12,6 @@
     ],
     "minimum-stability": "stable",
     "prefer-stable": true,
-    "repositories": [
-        {
-            "type": "git",
-            "url": "https://github.com/Luzifix/db2.git"
-        }
-    ],
     "autoload": {
         "psr-4": {
             "Erorus\\CASC\\": "src/Erorus/CASC/"
@@ -27,7 +21,6 @@
         "php": ">=7.2",
         "ext-curl": "*",
         "ext-zlib": "*",
-        "luzifix/db2": "dev-master",
         "zbateson/mail-mime-parser": "dev-master"
     }
 }
