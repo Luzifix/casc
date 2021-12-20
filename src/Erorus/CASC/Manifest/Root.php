@@ -12,7 +12,8 @@ use SplFixedArray;
 /**
  * This has the primary method we use to convert most file IDs into content hashes.
  */
-class Root extends Manifest {
+class Root extends Manifest
+{
     /**
      * Maps locale names we gave to the flags that Blizzard uses.
      */
@@ -86,11 +87,11 @@ class Root extends Manifest {
      * @throws \Exception
      */
     public function __construct(
-        Cache $cache,
+        Cache     $cache,
         \Iterator $servers,
-        string $cdnPath,
-        string $hash,
-        string $defaultLocale = 'enUS'
+        string    $cdnPath,
+        string    $hash,
+        string    $defaultLocale = 'enUS'
     ) {
         if (!key_exists($defaultLocale, static::LOCALE_FLAGS)) {
             throw new \Exception("Locale $defaultLocale is not supported\n");
@@ -131,8 +132,8 @@ class Root extends Manifest {
             }
         }
 
-        $stat = fstat($f);
-        $this->fileSize = $stat['size'];
+        $stat             = fstat($f);
+        $this->fileSize   = $stat['size'];
         $this->fileHandle = $f;
 
         fseek($this->fileHandle, 0);
@@ -145,12 +146,13 @@ class Root extends Manifest {
             $this->allowNonNamedFiles = $countTotal !== $countWithNameHash;
             $this->useOldRecordFormat = false;
         }
-   }
+    }
 
     /**
      * Close the open file handle.
      */
-    public function __destruct() {
+    public function __destruct()
+    {
         fclose($this->fileHandle);
     }
 
@@ -163,10 +165,12 @@ class Root extends Manifest {
      *
      * @return string|null A content hash, in binary bytes (not hex).
      */
-    public function getContentHash(string $nameOrId, ?string $locale = null): ?string {
+    public function getContentHash(string $nameOrId, ?string $locale = null): ?string
+    {
         if (is_null($locale) || !key_exists($locale, static::LOCALE_FLAGS)) {
             $locale = $this->defaultLocale;
         }
+
         $locale = static::LOCALE_FLAGS[$locale];
 
         $hashedName = static::jenkins_hashlittle2(strtoupper(str_replace('/', '\\', $nameOrId)));
@@ -196,7 +200,7 @@ class Root extends Manifest {
             if (!isset($this->blockCache[$blockId])) {
                 // We haven't read this block yet. Do so, and cache it.
                 $fileDataIds = [];
-                $nameHashes = [];
+                $nameHashes  = [];
 
                 // Read the file ID deltas.
                 $deltas = SplFixedArray::fromArray(
@@ -223,7 +227,7 @@ class Root extends Manifest {
                             [$contentKey, $nameHash] = str_split($data[$pos], 16);
 
                             $fileDataIds[$prevId = $deltas[$chunkOffset + $pos] + $prevId + 1] = $contentKey;
-                            $nameHashes[$nameHash] = $contentKey;
+                            $nameHashes[$nameHash]                                             = $contentKey;
                         }
                         unset($data);
                     }
@@ -241,7 +245,7 @@ class Root extends Manifest {
                             false
                         );
                         for ($pos = 0; $pos < $chunkSize; $pos++) {
-                            $contentKey = $data[$pos];
+                            $contentKey                                                        = $data[$pos];
                             $fileDataIds[$prevId = $deltas[$chunkOffset + $pos] + $prevId + 1] = $contentKey;
                         }
                         unset($data);
@@ -260,7 +264,7 @@ class Root extends Manifest {
                                 false
                             );
                             for ($pos = 0; $pos < $chunkSize; $pos++) {
-                                $nameHash = $data[$pos];
+                                $nameHash              = $data[$pos];
                                 $nameHashes[$nameHash] = $fileDataIds[$prevId = $deltas[$chunkOffset + $pos] + $prevId + 1];
                             }
                             unset($data);
@@ -295,31 +299,51 @@ class Root extends Manifest {
      *
      * @return string
      */
-    private static function jenkins_hashlittle2(string $txt): string {
-        $Rot = function($x,$k) {
-            return 0xFFFFFFFF & ((($x)<<($k)) | (($x)>>(32-($k))));
+    private static function jenkins_hashlittle2(string $txt): string
+    {
+        $Rot = function ($x, $k) {
+            return 0xFFFFFFFF & ((($x) << ($k)) | (($x) >> (32 - ($k))));
         };
 
-        $Mix = function(&$a,&$b,&$c) use ($Rot) {
-            $a = 0xFFFFFFFF & ($a - $c);  $a ^= $Rot($c, 4);  $c = 0xFFFFFFFF & ($c + $b);
-            $b = 0xFFFFFFFF & ($b - $a);  $b ^= $Rot($a, 6);  $a = 0xFFFFFFFF & ($a + $c);
-            $c = 0xFFFFFFFF & ($c - $b);  $c ^= $Rot($b, 8);  $b = 0xFFFFFFFF & ($b + $a);
-            $a = 0xFFFFFFFF & ($a - $c);  $a ^= $Rot($c,16);  $c = 0xFFFFFFFF & ($c + $b);
-            $b = 0xFFFFFFFF & ($b - $a);  $b ^= $Rot($a,19);  $a = 0xFFFFFFFF & ($a + $c);
-            $c = 0xFFFFFFFF & ($c - $b);  $c ^= $Rot($b, 4);  $b = 0xFFFFFFFF & ($b + $a);
+        $Mix = function (&$a, &$b, &$c) use ($Rot) {
+            $a = 0xFFFFFFFF & ($a - $c);
+            $a ^= $Rot($c, 4);
+            $c = 0xFFFFFFFF & ($c + $b);
+            $b = 0xFFFFFFFF & ($b - $a);
+            $b ^= $Rot($a, 6);
+            $a = 0xFFFFFFFF & ($a + $c);
+            $c = 0xFFFFFFFF & ($c - $b);
+            $c ^= $Rot($b, 8);
+            $b = 0xFFFFFFFF & ($b + $a);
+            $a = 0xFFFFFFFF & ($a - $c);
+            $a ^= $Rot($c, 16);
+            $c = 0xFFFFFFFF & ($c + $b);
+            $b = 0xFFFFFFFF & ($b - $a);
+            $b ^= $Rot($a, 19);
+            $a = 0xFFFFFFFF & ($a + $c);
+            $c = 0xFFFFFFFF & ($c - $b);
+            $c ^= $Rot($b, 4);
+            $b = 0xFFFFFFFF & ($b + $a);
         };
 
-        $Final = function(&$a,&$b,&$c) use ($Rot) {
-            $c ^= $b; $c = 0xFFFFFFFF & ($c - $Rot($b,14));
-            $a ^= $c; $a = 0xFFFFFFFF & ($a - $Rot($c,11));
-            $b ^= $a; $b = 0xFFFFFFFF & ($b - $Rot($a,25));
-            $c ^= $b; $c = 0xFFFFFFFF & ($c - $Rot($b,16));
-            $a ^= $c; $a = 0xFFFFFFFF & ($a - $Rot($c,4));
-            $b ^= $a; $b = 0xFFFFFFFF & ($b - $Rot($a,14));
-            $c ^= $b; $c = 0xFFFFFFFF & ($c - $Rot($b,24));
+        $Final = function (&$a, &$b, &$c) use ($Rot) {
+            $c ^= $b;
+            $c = 0xFFFFFFFF & ($c - $Rot($b, 14));
+            $a ^= $c;
+            $a = 0xFFFFFFFF & ($a - $Rot($c, 11));
+            $b ^= $a;
+            $b = 0xFFFFFFFF & ($b - $Rot($a, 25));
+            $c ^= $b;
+            $c = 0xFFFFFFFF & ($c - $Rot($b, 16));
+            $a ^= $c;
+            $a = 0xFFFFFFFF & ($a - $Rot($c, 4));
+            $b ^= $a;
+            $b = 0xFFFFFFFF & ($b - $Rot($a, 14));
+            $c ^= $b;
+            $c = 0xFFFFFFFF & ($c - $Rot($b, 24));
         };
 
-        $Ret = function($c, $b) {
+        $Ret = function ($c, $b) {
             $c = dechex($c);
             $b = dechex($b);
             return implode('', array_reverse(str_split(hex2bin(str_pad($c, 8, '0', STR_PAD_LEFT) . str_pad($b, 8, '0', STR_PAD_LEFT)))));
@@ -327,45 +351,205 @@ class Root extends Manifest {
 
         $a = $b = $c = 0xdeadbeef + strlen($txt);
 
-        $pos = 0;
+        $pos    = 0;
         $length = strlen($txt);
         while ($length > 12) {
             $vals = unpack('V*', substr($txt, $pos, 12));
-            $pos += 12;
+            $pos  += 12;
 
             $a = 0xFFFFFFFF & ($a + $vals[1]);
             $b = 0xFFFFFFFF & ($b + $vals[2]);
             $c = 0xFFFFFFFF & ($c + $vals[3]);
 
-            $Mix($a,$b,$c);
+            $Mix($a, $b, $c);
             $length -= 12;
         }
 
-        $last = substr($txt, $pos);
+        $last     = substr($txt, $pos);
         $leftover = (strlen($last) % 4);
         if ($leftover != 0) {
             $last .= str_repeat(chr(0), 4 - $leftover);
         }
         $k = array_values(unpack('L*', $last));
 
-        switch($length)
-        {
-            case 12: $c=0xFFFFFFFF & ($c+$k[2]); $b=0xFFFFFFFF & ($b+$k[1]); $a=0xFFFFFFFF & ($a+$k[0]); break;
-            case 11: $c=0xFFFFFFFF & ($c+($k[2]&0xffffff)); $b=0xFFFFFFFF & ($b+$k[1]); $a=0xFFFFFFFF & ($a+$k[0]); break;
-            case 10: $c=0xFFFFFFFF & ($c+($k[2]&0xffff)); $b=0xFFFFFFFF & ($b+$k[1]); $a=0xFFFFFFFF & ($a+$k[0]); break;
-            case 9 : $c=0xFFFFFFFF & ($c+($k[2]&0xff)); $b=0xFFFFFFFF & ($b+$k[1]); $a=0xFFFFFFFF & ($a+$k[0]); break;
-            case 8 : $b=0xFFFFFFFF & ($b+$k[1]); $a=0xFFFFFFFF & ($a+$k[0]); break;
-            case 7 : $b=0xFFFFFFFF & ($b+($k[1]&0xffffff)); $a=0xFFFFFFFF & ($a+$k[0]); break;
-            case 6 : $b=0xFFFFFFFF & ($b+($k[1]&0xffff)); $a=0xFFFFFFFF & ($a+$k[0]); break;
-            case 5 : $b=0xFFFFFFFF & ($b+($k[1]&0xff)); $a=0xFFFFFFFF & ($a+$k[0]); break;
-            case 4 : $a=0xFFFFFFFF & ($a+$k[0]); break;
-            case 3 : $a=0xFFFFFFFF & ($a+($k[0]&0xffffff)); break;
-            case 2 : $a=0xFFFFFFFF & ($a+($k[0]&0xffff)); break;
-            case 1 : $a=0xFFFFFFFF & ($a+($k[0]&0xff)); break;
-            case 0 : return $Ret($c,$b);  /* zero length strings require no mixing */
+        switch ($length) {
+            case 12:
+                $c = 0xFFFFFFFF & ($c + $k[2]);
+                $b = 0xFFFFFFFF & ($b + $k[1]);
+                $a = 0xFFFFFFFF & ($a + $k[0]);
+                break;
+            case 11:
+                $c = 0xFFFFFFFF & ($c + ($k[2] & 0xffffff));
+                $b = 0xFFFFFFFF & ($b + $k[1]);
+                $a = 0xFFFFFFFF & ($a + $k[0]);
+                break;
+            case 10:
+                $c = 0xFFFFFFFF & ($c + ($k[2] & 0xffff));
+                $b = 0xFFFFFFFF & ($b + $k[1]);
+                $a = 0xFFFFFFFF & ($a + $k[0]);
+                break;
+            case 9 :
+                $c = 0xFFFFFFFF & ($c + ($k[2] & 0xff));
+                $b = 0xFFFFFFFF & ($b + $k[1]);
+                $a = 0xFFFFFFFF & ($a + $k[0]);
+                break;
+            case 8 :
+                $b = 0xFFFFFFFF & ($b + $k[1]);
+                $a = 0xFFFFFFFF & ($a + $k[0]);
+                break;
+            case 7 :
+                $b = 0xFFFFFFFF & ($b + ($k[1] & 0xffffff));
+                $a = 0xFFFFFFFF & ($a + $k[0]);
+                break;
+            case 6 :
+                $b = 0xFFFFFFFF & ($b + ($k[1] & 0xffff));
+                $a = 0xFFFFFFFF & ($a + $k[0]);
+                break;
+            case 5 :
+                $b = 0xFFFFFFFF & ($b + ($k[1] & 0xff));
+                $a = 0xFFFFFFFF & ($a + $k[0]);
+                break;
+            case 4 :
+                $a = 0xFFFFFFFF & ($a + $k[0]);
+                break;
+            case 3 :
+                $a = 0xFFFFFFFF & ($a + ($k[0] & 0xffffff));
+                break;
+            case 2 :
+                $a = 0xFFFFFFFF & ($a + ($k[0] & 0xffff));
+                break;
+            case 1 :
+                $a = 0xFFFFFFFF & ($a + ($k[0] & 0xff));
+                break;
+            case 0 :
+                return $Ret($c, $b);  /* zero length strings require no mixing */
         }
 
-        $Final($a,$b,$c);
+        $Final($a, $b, $c);
         return $Ret($c, $b);
+    }
+
+    public function all(?string $locale = null): ?array
+    {
+        $result = [];
+        if (is_null($locale) || !key_exists($locale, static::LOCALE_FLAGS)) {
+            $locale = $this->defaultLocale;
+        }
+
+        $localeMask = static::LOCALE_FLAGS[$locale];
+
+        fseek($this->fileHandle, $this->useOldRecordFormat ? 0 : self::FILE_HEADER_LENGTH);
+
+        $blockId = -1;
+        while (ftell($this->fileHandle) < $this->fileSize) {
+            $blockId++;
+
+            // Read the block header.
+            [$numRec, $flags, $blockLocale] = array_values(unpack('lnumrec/Vflags/Vlocale', fread($this->fileHandle, 12)));
+
+            $blockHasNameHashes = !($this->allowNonNamedFiles && ($flags & self::FLAG_NO_NAME_HASH));
+
+            // Calculate how many bytes remain in this block, in case we need to skip past it.
+            $blockDataLength = $numRec * self::FILE_ID_LENGTH + $numRec * self::CONTENT_HASH_LENGTH;
+            if ($blockHasNameHashes) {
+                $blockDataLength += $numRec * self::NAME_HASH_LENGTH;
+            }
+
+            if (($blockLocale & $localeMask) !== $localeMask) {
+                // This block doesn't support the locale we're using. Skip it.
+                fseek($this->fileHandle, $blockDataLength, SEEK_CUR);
+                continue;
+            }
+
+            if (!isset($this->blockCache[$blockId])) {
+                // We haven't read this block yet. Do so, and cache it.
+                $fileDataIds = [];
+                $nameHashes  = [];
+
+
+                // Read the file ID deltas.
+                $deltas = SplFixedArray::fromArray(
+                    unpack('i*', fread($this->fileHandle, self::FILE_ID_LENGTH * $numRec)),
+                    false
+                );
+
+                if ($this->useOldRecordFormat) {
+                    // Legacy format: each record is a content hash and a name hash.
+                    $recLength = static::CONTENT_HASH_LENGTH + static::NAME_HASH_LENGTH;
+
+                    $prevId = -1;
+                    for ($chunkOffset = 0; $chunkOffset < $numRec; $chunkOffset += $chunkSize) {
+                        $chunkSize = min(static::CHUNK_RECORD_COUNT, $numRec - $chunkOffset);
+
+                        $data = SplFixedArray::fromArray(
+                            str_split(
+                                fread($this->fileHandle, $recLength * $chunkSize),
+                                $recLength
+                            ),
+                            false
+                        );
+                        for ($pos = 0; $pos < $chunkSize; $pos++) {
+                            [$contentKey, $nameHash] = str_split($data[$pos], 16);
+
+                            $prevId          = $deltas[$chunkOffset + $pos] + $prevId + 1;
+                            $result[$prevId] = [
+                                'nameHash'    => bin2hex(strrev($nameHash)),
+                                'contentHash' => bin2hex(strrev($contentKey)),
+                            ];
+                        }
+                        unset($data);
+                    }
+                } else {
+                    // Modern format: a list of content hashes, and then a list of name hashes (if flagged with such).
+                    $prevId = -1;
+                    for ($chunkOffset = 0; $chunkOffset < $numRec; $chunkOffset += $chunkSize) {
+                        $chunkSize = min(static::CHUNK_RECORD_COUNT, $numRec - $chunkOffset);
+
+                        $data = SplFixedArray::fromArray(
+                            str_split(
+                                fread($this->fileHandle, self::CONTENT_HASH_LENGTH * $chunkSize),
+                                self::CONTENT_HASH_LENGTH
+                            ),
+                            false
+                        );
+                        for ($pos = 0; $pos < $chunkSize; $pos++) {
+                            $contentKey      = $data[$pos];
+                            $prevId          = $deltas[$chunkOffset + $pos] + $prevId + 1;
+                            $result[$prevId]['contentHash'] = bin2hex(strrev($contentKey));
+                        }
+                        unset($data);
+                    }
+
+                    if ($blockHasNameHashes) {
+                        $prevId = -1;
+                        for ($chunkOffset = 0; $chunkOffset < $numRec; $chunkOffset += $chunkSize) {
+                            $chunkSize = min(static::CHUNK_RECORD_COUNT, $numRec - $chunkOffset);
+
+                            $data = SplFixedArray::fromArray(
+                                str_split(
+                                    fread($this->fileHandle, self::NAME_HASH_LENGTH * $chunkSize),
+                                    self::NAME_HASH_LENGTH
+                                ),
+                                false
+                            );
+                            for ($pos = 0; $pos < $chunkSize; $pos++) {
+                                $prevId = $deltas[$chunkOffset + $pos] + $prevId + 1;
+                                $result[$prevId]['nameHash'] = bin2hex(strrev($data[$pos]));
+                            }
+                            unset($data);
+                        }
+                    }
+                }
+
+                unset($deltas);
+                $this->blockCache[$blockId] = [$fileDataIds, $nameHashes];
+            } else {
+                // We can get the data from our block cache. Do that, and skip ahead to the next block.
+                [$fileDataIds, $nameHashes] = $this->blockCache[$blockId];
+                fseek($this->fileHandle, $blockDataLength, SEEK_CUR);
+            }
+        }
+
+        return $result;
     }
 }

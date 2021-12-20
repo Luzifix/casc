@@ -70,4 +70,9 @@ class Config {
     public function __get(string $name): array {
         return $this->props[$name] ?? [];
     }
+
+    public function getByKey(string $name): array
+    {
+        return $this->props[$name] ?? [];
+    }
 }

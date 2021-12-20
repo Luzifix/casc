@@ -251,6 +251,11 @@ class BLTE {
         return $writtenBytes;
     }
 
+    public function stream_cast(int $cast_at)
+    {
+        return $this->fileHandle;
+    }
+
     /**
      * Return the encryption key for the given name. Null when not found.
      *

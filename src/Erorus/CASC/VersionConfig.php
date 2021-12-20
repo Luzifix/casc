@@ -41,6 +41,9 @@ abstract class VersionConfig {
     /** @var string The hex file hash to download the CDN configuration for this version. */
     private $cdnConfig = '';
 
+    /** @var string The hex file hash to download the product configuration for this version. */
+    private $productConfig = '';
+
     /** @var string The full game version name represented by this config. e.g. "8.3.0.34601" */
     private $version = '';
 
@@ -129,6 +132,17 @@ abstract class VersionConfig {
         }
 
         return $this->cdnConfig;
+    }
+
+    /**
+     * @return string The hex file hash to download the product configuration for this version.
+     */
+    public function getProductConfig(): string {
+        if (!$this->productConfig) {
+            $this->getVersions();
+        }
+
+        return $this->productConfig;
     }
 
     /**
@@ -224,6 +238,7 @@ abstract class VersionConfig {
 
             $this->buildConfig = $row['buildconfig'] ?? '';
             $this->cdnConfig = $row['cdnconfig'] ?? '';
+            $this->productConfig = $row['productconfig'] ?? '';
             $this->version = $row['versionsname'] ?? '';
 
             break;
