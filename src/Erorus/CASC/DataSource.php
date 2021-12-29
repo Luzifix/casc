@@ -35,7 +35,7 @@ abstract class DataSource {
      *
      * @param Location $locationInfo
      * @param string $destPath
-     * @param string|null $contentHash The md5 hash of the result must match this hash.
+     * @param string|null $contentHash The md5 hash of the result must match this hash. (hex md5)
      *
      * @return bool Success
      */
@@ -44,7 +44,7 @@ abstract class DataSource {
 
         $success = $success && file_exists($destPath);
         $success = $success && filesize($destPath) > 0;
-        $success = $success && (is_null($contentHash) || ($contentHash === md5_file($destPath, true)));
+        $success = $success && (is_null($contentHash) || ($contentHash === md5_file($destPath)));
 
         if (!$success && !self::$ignoreErrors) {
             unlink($destPath);

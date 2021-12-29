@@ -283,7 +283,7 @@ class NGDP {
             foreach ($contentMap->getEncodedHashes() as $hash) {
                 try {
                     if ($location = $dataSource->findHashInIndexes($hash)) {
-                        if ($dataSource->extractFile($location, $destPath, $contentHash)) {
+                        if ($dataSource->extractFile($location, $destPath)) {
                             return $dataSourceName;
                         }
                     }
