@@ -50,7 +50,10 @@ class Root extends Manifest
     private const FILE_ID_LENGTH = 4;
 
     /** @var int Block flag which indicate the block has no name hashes. */
-    private const FLAG_NO_NAME_HASH = 0x10000000;
+    private const CONTENT_FLAG_NO_NAME_HASH = 0x10000000;
+
+    /** @var int Block flag which indicate the block entries are encrypted. */
+    private const CONTENT_FLAG_ENCRYPTED = 0x8000000;
 
     /** @var int The length of name hashes: jenkins96 hash returns 8 bytes. */
     private const NAME_HASH_LENGTH = 8;
@@ -184,7 +187,7 @@ class Root extends Manifest
             // Read the block header.
             [$numRec, $flags, $blockLocale] = array_values(unpack('lnumrec/Vflags/Vlocale', fread($this->fileHandle, 12)));
 
-            $blockHasNameHashes = !($this->allowNonNamedFiles && ($flags & self::FLAG_NO_NAME_HASH));
+            $blockHasNameHashes = !($this->allowNonNamedFiles && ($flags & self::CONTENT_FLAG_NO_NAME_HASH));
 
             // Calculate how many bytes remain in this block, in case we need to skip past it.
             $blockDataLength = $numRec * self::FILE_ID_LENGTH + $numRec * self::CONTENT_HASH_LENGTH;
@@ -445,9 +448,10 @@ class Root extends Manifest
             $blockId++;
 
             // Read the block header.
-            [$numRec, $flags, $blockLocale] = array_values(unpack('lnumrec/Vflags/Vlocale', fread($this->fileHandle, 12)));
+            [$numRec, $contentFlags, $blockLocale] = array_values(unpack('lnumrec/Vflags/Vlocale', fread($this->fileHandle, 12)));
 
-            $blockHasNameHashes = !($this->allowNonNamedFiles && ($flags & self::FLAG_NO_NAME_HASH));
+            $blockHasNameHashes        = !($this->allowNonNamedFiles && ($contentFlags & self::CONTENT_FLAG_NO_NAME_HASH));
+            $encryptedContentFlagBlock = (($contentFlags & self::CONTENT_FLAG_ENCRYPTED) === self::CONTENT_FLAG_ENCRYPTED);
 
             // Calculate how many bytes remain in this block, in case we need to skip past it.
             $blockDataLength = $numRec * self::FILE_ID_LENGTH + $numRec * self::CONTENT_HASH_LENGTH;
@@ -495,6 +499,7 @@ class Root extends Manifest
                             $result[$prevId] = [
                                 'nameHash'    => bin2hex(strrev($nameHash)),
                                 'contentHash' => bin2hex(strrev($contentKey)),
+                                'encrypted'   => $encryptedContentFlagBlock,
                             ];
                         }
                         unset($data);
@@ -516,6 +521,7 @@ class Root extends Manifest
                             $contentKey      = $data[$pos];
                             $prevId          = $deltas[$chunkOffset + $pos] + $prevId + 1;
                             $result[$prevId]['contentHash'] = bin2hex(strrev($contentKey));
+                            $result[$prevId]['encrypted']   = $encryptedContentFlagBlock;
                         }
                         unset($data);
                     }
