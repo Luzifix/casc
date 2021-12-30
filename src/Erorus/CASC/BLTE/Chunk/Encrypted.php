@@ -124,7 +124,7 @@ class Encrypted extends Chunk {
         if (is_null($this->key)) {
             $this->key = BLTE::getEncryptionKey($this->keyName);
             if (!$this->key && ($this->encodedSize <= $this->encodedBytesWritten)) {
-                fwrite(STDERR, sprintf("Could not find key %s\n", bin2hex($this->keyName)));
+                fwrite(STDERR, sprintf("Could not find key %s\n", bin2hex(strrev($this->keyName))));
                 fwrite($this->fileHandle, str_repeat("\0", $this->decodedSize));
             }
         }
