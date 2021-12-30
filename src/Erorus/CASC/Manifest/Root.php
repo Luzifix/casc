@@ -498,7 +498,7 @@ class Root extends Manifest
                             $prevId          = $deltas[$chunkOffset + $pos] + $prevId + 1;
                             $result[$prevId] = [
                                 'nameHash'    => bin2hex(strrev($nameHash)),
-                                'contentHash' => bin2hex(strrev($contentKey)),
+                                'contentHash' => bin2hex($contentKey),
                                 'encrypted'   => $encryptedContentFlagBlock,
                             ];
                         }
@@ -520,7 +520,7 @@ class Root extends Manifest
                         for ($pos = 0; $pos < $chunkSize; $pos++) {
                             $contentKey      = $data[$pos];
                             $prevId          = $deltas[$chunkOffset + $pos] + $prevId + 1;
-                            $result[$prevId]['contentHash'] = bin2hex(strrev($contentKey));
+                            $result[$prevId]['contentHash'] = bin2hex($contentKey);
                             $result[$prevId]['encrypted']   = $encryptedContentFlagBlock;
                         }
                         unset($data);

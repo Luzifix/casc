@@ -7,15 +7,19 @@ use Erorus\CASC\Encoding\ContentMap;
 /**
  * This is where we map content hashes to encoding hashes, which are themselves used as keys in the DataSource.
  */
-class Encoding {
+class Encoding
+{
     /** @var int How many bytes into a content table entry you find the start of the content hash. */
     private const CONTENT_TABLE_ENTRY_CONTENT_HASH_OFFSET = 6;
 
     /** @var int The number of bytes in a page index, excluding the size of the hash used for that table type. */
     private const INDEX_ENTRY_DATA_LENGTH = 16;
 
-    /** @var string[] The first content hash in each content table page.  */
+    /** @var string[] The first content hash in each content table page. */
     private $entryMap = [];
+
+    /** @var array<string, ContentMap> */
+    private $contentMap = [];
 
     /** @var int Where the content table data starts. */
     private $entryStart;
@@ -37,7 +41,8 @@ class Encoding {
      *
      * @throws \Exception
      */
-    public function __construct(Cache $cache, \Iterator $servers, string $cdnPath, string $hash, bool $isBLTE) {
+    public function __construct(Cache $cache, \Iterator $servers, string $cdnPath, string $hash, bool $isBLTE, bool $preloadEncoding = false)
+    {
         $cachePath = 'data/' . $hash;
 
         $f = $cache->getReadHandle($cachePath);
@@ -106,22 +111,64 @@ class Encoding {
             // Remember where we started this page.
             $pageStart = ftell($f);
 
-            // Read the first content hash in this (first) entry of the page.
-            fseek($f, self::CONTENT_TABLE_ENTRY_CONTENT_HASH_OFFSET, SEEK_CUR);
-            $this->entryMap[] = fread($f, $this->header['contentHashSize']);
+
+            if ($preloadEncoding) {
+                $this->readPageContent(fread($f, $pageSize));
+            } else {
+                // Read the first content hash in this (first) entry of the page.
+                fseek($f, self::CONTENT_TABLE_ENTRY_CONTENT_HASH_OFFSET, SEEK_CUR);
+                $contentHash      = fread($f, $this->header['contentHashSize']);
+                $this->entryMap[] = $contentHash;
+            }
+
 
             // Jump to the start of the next page.
             fseek($f, $pageStart + $pageSize);
         }
 
         $this->fileHandle = $f;
+
+        if (!$preloadEncoding) {
+            foreach ($this->entryMap as $entry) {
+                $this->contentMap[$entry] = $this->getContentMap($entry);
+            }
+        }
     }
 
     /**
-     * Closes the file handle when destructing the object.
+     * @param string $pageBytes
+     * @throws \Exception
      */
-    public function __destruct() {
-        fclose($this->fileHandle);
+    private function readPageContent(string $pageBytes): void
+    {
+        $pos = 0;
+        while ($pos < strlen($pageBytes)) {
+            $keyCount = ord(substr($pageBytes, $pos++, 1));
+            if ($keyCount == 0) {
+                break;
+            }
+
+            $fileSize = unpack('J', str_repeat(chr(0), 3) . substr($pageBytes, $pos, 5))[1];
+            $pos      += 5;
+            if ($fileSize == 0) {
+                break;
+            }
+
+            $contentHash = substr($pageBytes, $pos, $this->header['contentHashSize']);
+            $pos         += $this->header['contentHashSize'];
+
+            $encodedHashes = [];
+            for ($x = 0; $x < $keyCount; $x++) {
+                $encodedHashes[] = substr($pageBytes, $pos, $this->header['encodingHashSize']);
+                $pos             += $this->header['encodingHashSize'];
+            }
+
+            $this->contentMap[$contentHash] = new ContentMap([
+                'contentHash'   => $contentHash,
+                'encodedHashes' => $encodedHashes,
+                'fileSize'      => $fileSize,
+            ]);
+        }
     }
 
     /**
@@ -131,7 +178,12 @@ class Encoding {
      *
      * @return ContentMap|null
      */
-    public function getContentMap(string $contentHash): ?ContentMap {
+    public function getContentMap(string $contentHash): ?ContentMap
+    {
+        if (!empty($this->contentMap[$contentHash])) {
+            return $this->contentMap[$contentHash];
+        }
+
         $idx = $this->findInMap($contentHash);
         if ($idx < 0) {
             return null;
@@ -140,52 +192,7 @@ class Encoding {
         $pageSize = $this->header['contentTableSizeKb'] * 1024;
         fseek($this->fileHandle, $this->entryStart + $idx * $pageSize);
 
-        return $this->findContentMapInPage($contentHash, fread($this->fileHandle, $pageSize));
-    }
-
-    /**
-     * Return the content map for the given content hash found in the given page bytes, or null if not found.
-     *
-     * @param string $contentHash
-     * @param string $pageBytes
-     *
-     * @return ContentMap|null
-     */
-    private function findContentMapInPage(string $contentHash, string $pageBytes): ?ContentMap {
-        $pos = 0;
-        while ($pos < strlen($pageBytes)) {
-            $keyCount = ord(substr($pageBytes, $pos++, 1));
-            if ($keyCount == 0) {
-                break;
-            }
-
-            $fileSize = unpack('J', str_repeat(chr(0), 3) . substr($pageBytes, $pos, 5))[1];
-            $pos += 5;
-            if ($fileSize == 0) {
-                break;
-            }
-
-            $hash = substr($pageBytes, $pos, $this->header['contentHashSize']);
-            $pos += $this->header['contentHashSize'];
-
-            if ($hash === $contentHash) {
-                $encodedHashes = [];
-                for ($x = 0; $x < $keyCount; $x++) {
-                    $encodedHashes[] = substr($pageBytes, $pos, $this->header['encodingHashSize']);
-                    $pos += $this->header['encodingHashSize'];
-                }
-
-                return new ContentMap([
-                    'contentHash' => $contentHash,
-                    'encodedHashes' => $encodedHashes,
-                    'fileSize' => $fileSize,
-                ]);
-            } else {
-                $pos += $this->header['encodingHashSize'] * $keyCount;
-            }
-        }
-
-        return null;
+        return $this->contentMap[$contentHash] = $this->findContentMapInPage($contentHash, fread($this->fileHandle, $pageSize));
     }
 
     /**
@@ -196,7 +203,8 @@ class Encoding {
      *
      * @return int
      */
-    private function findInMap(string $needle): int {
+    private function findInMap(string $needle): int
+    {
         $map = $this->entryMap;
 
         $lo = 0;
@@ -215,5 +223,59 @@ class Encoding {
         }
 
         return $lo - 1;
+    }
+
+    /**
+     * Return the content map for the given content hash found in the given page bytes, or null if not found.
+     *
+     * @param string $contentHash
+     * @param string $pageBytes
+     *
+     * @return ContentMap|null
+     */
+    private function findContentMapInPage(string $contentHash, string $pageBytes): ?ContentMap
+    {
+        $pos = 0;
+        while ($pos < strlen($pageBytes)) {
+            $keyCount = ord(substr($pageBytes, $pos++, 1));
+            if ($keyCount == 0) {
+                break;
+            }
+
+            $fileSize = unpack('J', str_repeat(chr(0), 3) . substr($pageBytes, $pos, 5))[1];
+            $pos      += 5;
+            if ($fileSize == 0) {
+                break;
+            }
+
+            $hash = substr($pageBytes, $pos, $this->header['contentHashSize']);
+            $pos  += $this->header['contentHashSize'];
+
+            if ($hash === $contentHash) {
+                $encodedHashes = [];
+                for ($x = 0; $x < $keyCount; $x++) {
+                    $encodedHashes[] = substr($pageBytes, $pos, $this->header['encodingHashSize']);
+                    $pos             += $this->header['encodingHashSize'];
+                }
+
+                return new ContentMap([
+                    'contentHash'   => $contentHash,
+                    'encodedHashes' => $encodedHashes,
+                    'fileSize'      => $fileSize,
+                ]);
+            } else {
+                $pos += $this->header['encodingHashSize'] * $keyCount;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Closes the file handle when destructing the object.
+     */
+    public function __destruct()
+    {
+        fclose($this->fileHandle);
     }
 }
