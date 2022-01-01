@@ -302,8 +302,12 @@ class Root extends Manifest
      *
      * @return string
      */
-    private static function jenkins_hashlittle2(string $txt): string
+    public static function jenkins_hashlittle2(string $txt, bool $normilize = false): string
     {
+        if ($normilize) {
+            $txt = strtoupper(str_replace('/', '\\', $txt));
+        }
+
         $Rot = function ($x, $k) {
             return 0xFFFFFFFF & ((($x) << ($k)) | (($x) >> (32 - ($k))));
         };
