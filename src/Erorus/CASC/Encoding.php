@@ -41,11 +41,11 @@ class Encoding
      *
      * @throws \Exception
      */
-    public function __construct(Cache $cache, \Iterator $servers, string $cdnPath, string $hash, bool $isBLTE, bool $preloadEncoding = false)
+    public function __construct(Cache $cache, \Iterator $servers, string $cdnPath, string $hash, bool $isBLTE, bool $preloadEncoding = false, ?string $proxy = null, ?string $contentHash = null)
     {
         $cachePath = 'data/' . $hash;
 
-        $f = $cache->getReadHandle($cachePath);
+        $f = $cache->getReadHandle($cachePath, $contentHash);
         if (is_null($f)) {
             foreach ($servers as $server) {
                 $f = $cache->getWriteHandle($cachePath, $isBLTE);
@@ -55,7 +55,7 @@ class Encoding
 
                 $url = Util::buildTACTUrl($server, $cdnPath, 'data', $hash);
                 try {
-                    $success = HTTP::get($url, $f);
+                    $success = HTTP::get($url, $f, null, $proxy);
                 } catch (BLTE\Exception $e) {
                     $success = false;
                 } catch (\Exception $e) {
@@ -68,7 +68,7 @@ class Encoding
                     continue;
                 }
                 fclose($f);
-                $f = $cache->getReadHandle($cachePath);
+                $f = $cache->getReadHandle($cachePath, $contentHash);
                 break;
             }
             if (!$success) {

@@ -94,7 +94,9 @@ class Root extends Manifest
         \Iterator $servers,
         string    $cdnPath,
         string    $hash,
-        string    $defaultLocale = 'enUS'
+        string    $defaultLocale = 'enUS',
+        ?string   $proxy = null,
+        ?string   $contentHash = null
     ) {
         if (!key_exists($defaultLocale, static::LOCALE_FLAGS)) {
             throw new \Exception("Locale $defaultLocale is not supported\n");
@@ -104,7 +106,7 @@ class Root extends Manifest
 
         $cachePath = 'data/' . $hash;
 
-        $f = $cache->getReadHandle($cachePath);
+        $f = $cache->getReadHandle($cachePath, $contentHash);
         if (is_null($f)) {
             foreach ($servers as $server) {
                 $f = $cache->getWriteHandle($cachePath, true);
@@ -114,7 +116,7 @@ class Root extends Manifest
 
                 $url = Util::buildTACTUrl($server, $cdnPath, 'data', $hash);
                 try {
-                    $success = HTTP::get($url, $f);
+                    $success = HTTP::get($url, $f, null, $proxy);
                 } catch (BLTE\Exception $e) {
                     $success = false;
                 } catch (\Exception $e) {
@@ -127,7 +129,7 @@ class Root extends Manifest
                     continue;
                 }
                 fclose($f);
-                $f = $cache->getReadHandle($cachePath);
+                $f = $cache->getReadHandle($cachePath, $contentHash);
                 break;
             }
             if (!$success) {

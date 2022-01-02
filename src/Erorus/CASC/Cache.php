@@ -91,9 +91,14 @@ class Cache {
      *
      * @return resource|null
      */
-    public function getReadHandle(string $path) {
+    public function getReadHandle(string $path, ?string $contentHash = null) {
         $fullPath = $this->getFullPath($path);
         if (file_exists($fullPath)) {
+            if ($contentHash && md5_file($fullPath) !== $contentHash) {
+                unlink($fullPath);
+                return null;
+            }
+
             $result = fopen($fullPath, 'rb');
 
             return ($result === false) ? null : $result;

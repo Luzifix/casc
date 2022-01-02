@@ -27,10 +27,10 @@ class Install extends Manifest {
      *
      * @throws \Exception
      */
-    public function __construct(Cache $cache, \Iterator $servers, string $cdnPath, string $hash) {
+    public function __construct(Cache $cache, \Iterator $servers, string $cdnPath, string $hash, ?string $proxy = null, ?string $contentHash = null) {
         $cachePath = 'data/' . $hash;
 
-        $f = $cache->getReadHandle($cachePath);
+        $f = $cache->getReadHandle($cachePath, $contentHash);
         if (is_null($f)) {
             foreach ($servers as $server) {
                 $f = $cache->getWriteHandle($cachePath, true);
@@ -40,7 +40,7 @@ class Install extends Manifest {
 
                 $url = Util::buildTACTUrl($server, $cdnPath, 'data', $hash);
                 try {
-                    $success = HTTP::get($url, $f);
+                    $success = HTTP::get($url, $f, null, $proxy);
                 } catch (BLTE\Exception $e) {
                     $success = false;
                 } catch (\Exception $e) {
@@ -53,7 +53,7 @@ class Install extends Manifest {
                     continue;
                 }
                 fclose($f);
-                $f = $cache->getReadHandle($cachePath);
+                $f = $cache->getReadHandle($cachePath, $contentHash);
                 break;
             }
             if (!$success) {

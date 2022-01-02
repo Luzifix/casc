@@ -5,7 +5,8 @@ namespace Erorus\CASC;
 /**
  * Uses cURL to perform HTTP requests, optionally printing progress to a stream. Favors persistent connections.
  */
-class HTTP {
+class HTTP
+{
     /** @var int Downloads below this total size, in bytes, will not print progress updates. */
     private const PROGRESS_MINIMUM_FILE_SIZE = 256 * 1024;
 
@@ -21,13 +22,13 @@ class HTTP {
     /** @var int[] Statistics about how many requests and connections we made. */
     private static $connectionTracking = [
         'connections' => 0,
-        'requests' => 0,
+        'requests'    => 0,
     ];
 
     /** @var resource|null A handle to the persistent curl instance. */
     private static $curlHandle = null;
 
-    /** @var bool[] Keyed by host:port, the hosts we've connected to recently.  */
+    /** @var bool[] Keyed by host:port, the hosts we've connected to recently. */
     private static $curlSeenHosts = [];
 
     /** @var int How many bytes we downloaded in the current operation. */
@@ -51,8 +52,9 @@ class HTTP {
      *
      * @return string[]
      */
-    public static function abandonConnections(): array {
-        $oldHosts = array_keys(static::$curlSeenHosts);
+    public static function abandonConnections(): array
+    {
+        $oldHosts              = array_keys(static::$curlSeenHosts);
         static::$curlSeenHosts = [];
 
         return $oldHosts;
@@ -61,7 +63,8 @@ class HTTP {
     /**
      * Closes our current curl handle. Happens automatically on shutdown, normally no need to call this.
      */
-    public static function closeCurl(): void {
+    public static function closeCurl(): void
+    {
         if (!is_null(static::$curlHandle)) {
             curl_close(static::$curlHandle);
             static::$curlHandle = null;
@@ -73,7 +76,8 @@ class HTTP {
      *
      * @return int[]
      */
-    public static function getStats(): array {
+    public static function getStats(): array
+    {
         return static::$connectionTracking;
     }
 
@@ -87,7 +91,8 @@ class HTTP {
      * @return mixed False on failure. The fetched data as a string, or boolean true when using $fileHandle.
      * @throws \Exception
      */
-    public static function get(string $url, $fileHandle = null, ?string $range = null) {
+    public static function get(string $url, $fileHandle = null, ?string $range = null, ?string $proxy = null)
+    {
         $ch = static::getCurl();
 
         curl_setopt_array($ch, [
@@ -96,10 +101,16 @@ class HTTP {
             CURLOPT_FRESH_CONNECT  => static::needsNewConnection($url),
             CURLOPT_SSLVERSION     => 6, //CURL_SSLVERSION_TLSv1_2,
             CURLOPT_CONNECTTIMEOUT => 6,
-            CURLOPT_ENCODING       => 'gzip',
-            CURLOPT_LOW_SPEED_LIMIT => 50 * 1024,
-            CURLOPT_LOW_SPEED_TIME => 20,
+            CURLOPT_ENCODING       => 'gzip'
         ]);
+
+        if ($proxy) {
+            curl_setopt($ch, CURLOPT_PROXY, $proxy);
+        } else {
+            curl_setopt($ch, CURLOPT_LOW_SPEED_LIMIT, 50 * 1024);
+            curl_setopt($ch, CURLOPT_LOW_SPEED_TIME, 20);
+        }
+
         if (!is_null($fileHandle)) {
             curl_setopt($ch, CURLOPT_FILE, $fileHandle);
         } else {
@@ -108,12 +119,12 @@ class HTTP {
                 CURLOPT_HEADER         => true,
             ]);
         }
-        static::$downloaded = 0;
+        static::$downloaded      = 0;
         static::$progressPrinted = 0;
         if (!is_null(static::$writeProgressToStream)) {
             static::$progressPrintedTime = microtime(true) + static::PROGRESS_UPDATE_DELAY - static::PROGRESS_UPDATE_INTERVAL;
             curl_setopt_array($ch, [
-                CURLOPT_NOPROGRESS => false,
+                CURLOPT_NOPROGRESS       => false,
                 CURLOPT_PROGRESSFUNCTION =>
                     function ($ch, $totalDown, $transmittedDown, $totalUp, $transmittedUp): int {
                         static::onCurlProgress($totalDown, $transmittedDown);
@@ -125,10 +136,10 @@ class HTTP {
             curl_setopt($ch, CURLOPT_RANGE, $range);
         }
 
-        $started = microtime(true);
-        $data = curl_exec($ch);
+        $started  = microtime(true);
+        $data     = curl_exec($ch);
         $finished = microtime(true);
-        $errMsg = curl_error($ch);
+        $errMsg   = curl_error($ch);
 
         static::$connectionTracking['connections'] += curl_getinfo($ch, CURLINFO_NUM_CONNECTS);
         static::$connectionTracking['requests']++;
@@ -148,7 +159,7 @@ class HTTP {
                     break;
                 }
                 $headerLines = explode("\r\n", substr($data, 0, $pos));
-                $data = substr($data, $pos + 4);
+                $data        = substr($data, $pos + 4);
             } while (
                 $data &&
                 preg_match('/^HTTP\/\d+\.\d+ (\d+)/', $headerLines[0], $res) &&
@@ -162,7 +173,7 @@ class HTTP {
             fwrite(static::$writeProgressToStream, "\x1B[K");
 
             $downloaded = static::$downloaded / 1048576;
-            $speed = $downloaded / ($finished - $started);
+            $speed      = $downloaded / ($finished - $started);
 
             $line = sprintf("%.1fM (%.2f MBps)", $downloaded, $speed);
             fwrite(static::$writeProgressToStream, $line);
@@ -181,73 +192,12 @@ class HTTP {
     }
 
     /**
-     * Performs an HTTP HEAD request.
-     *
-     * @param string $url The full URL to fetch.
-     *
-     * @return string[] HTTP headers, keyed by header name.
-     * @throws \Exception
-     */
-    public static function head(string $url): array {
-        $ch = static::getCurl();
-
-        curl_setopt_array($ch, [
-            CURLOPT_URL            => $url,
-            CURLOPT_FOLLOWLOCATION => false,
-            CURLOPT_NOBODY         => true,
-            CURLOPT_FRESH_CONNECT  => static::needsNewConnection($url),
-            CURLOPT_SSLVERSION     => 6, //CURL_SSLVERSION_TLSv1_2,
-            CURLOPT_TIMEOUT        => PHP_SAPI == 'cli' ? 30 : 8,
-            CURLOPT_CONNECTTIMEOUT => 6,
-        ]);
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_HEADER         => true,
-        ]);
-
-        $data = curl_exec($ch);
-        $errMsg = curl_error($ch);
-
-        static::$connectionTracking['connections'] += curl_getinfo($ch, CURLINFO_NUM_CONNECTS);
-        static::$connectionTracking['requests']++;
-
-        if ($errMsg) {
-            throw new \Exception(sprintf("cURL error fetching %s - %d %s", $url, curl_errno($ch), $errMsg));
-        }
-
-        $responseCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-
-        $headerLines = [];
-        do {
-            $pos = strpos($data, "\r\n\r\n");
-            if ($pos === false) {
-                break;
-            }
-            $headerLines = explode("\r\n", substr($data, 0, $pos));
-            $data = substr($data, $pos + 4);
-        } while (
-            $data &&
-            preg_match('/^HTTP\/\d+\.\d+ (\d+)/', $headerLines[0], $res) &&
-            ($res[1] != $responseCode)
-        ); // mostly to handle 100 Continue, maybe 30x redirects too
-
-        $headers = [];
-        foreach ($headerLines as $headerLine) {
-            if (preg_match('/^([^:]+):\s*([\w\W]+)/', $headerLine, $headerLineParts)) {
-                $headers[$headerLineParts[1]] = $headerLineParts[2];
-            }
-        }
-        $outHeaders = array_merge(['responseCode' => $responseCode], $headers);
-
-        return $outHeaders;
-    }
-
-    /**
      * Returns our current curl handle, reset for a new request.
      *
      * @return resource
      */
-    private static function getCurl() {
+    private static function getCurl()
+    {
         if (is_null(static::$curlHandle)) {
             static::$curlHandle = curl_init();
         } else {
@@ -269,7 +219,8 @@ class HTTP {
      *
      * @return bool
      */
-    private static function needsNewConnection(string $url): bool {
+    private static function needsNewConnection(string $url): bool
+    {
         $urlParts = parse_url($url);
         if (!isset($urlParts['host'])) {
             return true;
@@ -287,7 +238,7 @@ class HTTP {
                 }
             }
         }
-        $hostKey = $urlParts['host'].':'.$urlParts['port'];
+        $hostKey = $urlParts['host'] . ':' . $urlParts['port'];
         if (isset(static::$curlSeenHosts[$hostKey])) {
             return false;
         }
@@ -302,7 +253,8 @@ class HTTP {
      * @param int $totalDown
      * @param int $transmittedDown
      */
-    private static function onCurlProgress(int $totalDown, int $transmittedDown): void {
+    private static function onCurlProgress(int $totalDown, int $transmittedDown): void
+    {
         static::$downloaded = $transmittedDown;
 
         if (
@@ -318,7 +270,7 @@ class HTTP {
 
             // Calculate a download speed since our last message.
             $speed = ($transmittedDown - static::$progressPrinted) / 1048576 /
-                     (microtime(true) - static::$progressPrintedTime);
+                (microtime(true) - static::$progressPrintedTime);
         } else {
             // Starting to write progress messages. Write the URL.
             fwrite(static::$writeProgressToStream, sprintf(" - %s ", static::$url));
@@ -340,7 +292,70 @@ class HTTP {
         // Move the cursor back to where we started printing this progress message.
         fwrite(static::$writeProgressToStream, sprintf("\x1B[%dD", strlen($line)));
 
-        static::$progressPrinted = $transmittedDown;
+        static::$progressPrinted     = $transmittedDown;
         static::$progressPrintedTime = microtime(true);
+    }
+
+    /**
+     * Performs an HTTP HEAD request.
+     *
+     * @param string $url The full URL to fetch.
+     *
+     * @return string[] HTTP headers, keyed by header name.
+     * @throws \Exception
+     */
+    public static function head(string $url): array
+    {
+        $ch = static::getCurl();
+
+        curl_setopt_array($ch, [
+            CURLOPT_URL            => $url,
+            CURLOPT_FOLLOWLOCATION => false,
+            CURLOPT_NOBODY         => true,
+            CURLOPT_FRESH_CONNECT  => static::needsNewConnection($url),
+            CURLOPT_SSLVERSION     => 6, //CURL_SSLVERSION_TLSv1_2,
+            CURLOPT_TIMEOUT        => PHP_SAPI == 'cli' ? 30 : 8,
+            CURLOPT_CONNECTTIMEOUT => 6,
+        ]);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HEADER         => true,
+        ]);
+
+        $data   = curl_exec($ch);
+        $errMsg = curl_error($ch);
+
+        static::$connectionTracking['connections'] += curl_getinfo($ch, CURLINFO_NUM_CONNECTS);
+        static::$connectionTracking['requests']++;
+
+        if ($errMsg) {
+            throw new \Exception(sprintf("cURL error fetching %s - %d %s", $url, curl_errno($ch), $errMsg));
+        }
+
+        $responseCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+
+        $headerLines = [];
+        do {
+            $pos = strpos($data, "\r\n\r\n");
+            if ($pos === false) {
+                break;
+            }
+            $headerLines = explode("\r\n", substr($data, 0, $pos));
+            $data        = substr($data, $pos + 4);
+        } while (
+            $data &&
+            preg_match('/^HTTP\/\d+\.\d+ (\d+)/', $headerLines[0], $res) &&
+            ($res[1] != $responseCode)
+        ); // mostly to handle 100 Continue, maybe 30x redirects too
+
+        $headers = [];
+        foreach ($headerLines as $headerLine) {
+            if (preg_match('/^([^:]+):\s*([\w\W]+)/', $headerLine, $headerLineParts)) {
+                $headers[$headerLineParts[1]] = $headerLineParts[2];
+            }
+        }
+        $outHeaders = array_merge(['responseCode' => $responseCode], $headers);
+
+        return $outHeaders;
     }
 }
