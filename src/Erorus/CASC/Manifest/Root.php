@@ -7,6 +7,8 @@ use Erorus\CASC\Cache;
 use Erorus\CASC\HTTP;
 use Erorus\CASC\Manifest;
 use Erorus\CASC\Util;
+use Exception;
+use Iterator;
 use SplFixedArray;
 
 /**
@@ -82,24 +84,24 @@ class Root extends Manifest
      * Initializes our Root manifest by fetching (and caching) a single Root data file for this version.
      *
      * @param Cache $cache A disk cache where we can find and store raw files we download.
-     * @param \Iterator $servers Typically a HostList, or an array. CDN hostnames.
+     * @param Iterator $servers Typically a HostList, or an array. CDN hostnames.
      * @param string $cdnPath A product-specific path component from the versionConfig where we get these assets.
      * @param string $hash The hex hash string for the file to read.
      * @param string $defaultLocale One of the keys in self::LOCALE_FLAGS.
      *
-     * @throws \Exception
+     * @throws Exception
      */
     public function __construct(
-        Cache     $cache,
-        \Iterator $servers,
-        string    $cdnPath,
-        string    $hash,
-        string    $defaultLocale = 'enUS',
-        ?string   $proxy = null,
-        ?string   $contentHash = null
+        Cache $cache,
+        Iterator $servers,
+        string $cdnPath,
+        string $hash,
+        string $defaultLocale = 'enUS',
+        ?string $proxy = null,
+        ?string $contentHash = null
     ) {
         if (!key_exists($defaultLocale, static::LOCALE_FLAGS)) {
-            throw new \Exception("Locale $defaultLocale is not supported\n");
+            throw new Exception("Locale $defaultLocale is not supported\n");
         }
 
         $this->defaultLocale = $defaultLocale;
@@ -111,7 +113,7 @@ class Root extends Manifest
             foreach ($servers as $server) {
                 $f = $cache->getWriteHandle($cachePath, true);
                 if (is_null($f)) {
-                    throw new \Exception("Cannot create temp buffer for root data\n");
+                    throw new Exception("Cannot create temp buffer for root data\n");
                 }
 
                 $url = Util::buildTACTUrl($server, $cdnPath, 'data', $hash);
@@ -119,7 +121,7 @@ class Root extends Manifest
                     $success = HTTP::get($url, $f, null, $proxy);
                 } catch (BLTE\Exception $e) {
                     $success = false;
-                } catch (\Exception $e) {
+                } catch (Exception $e) {
                     echo "\n - " . $e->getMessage() . " ";
                     $success = false;
                 }
@@ -133,7 +135,7 @@ class Root extends Manifest
                 break;
             }
             if (!$success) {
-                throw new \Exception("Could not fetch root data at $url\n");
+                throw new Exception("Could not fetch root data at $url\n");
             }
         }
 
@@ -209,7 +211,7 @@ class Root extends Manifest
 
                 // Read the file ID deltas.
                 $deltas = SplFixedArray::fromArray(
-                    unpack('i*', fread($this->fileHandle, self::FILE_ID_LENGTH * $numRec)),
+                    unpack('l*', fread($this->fileHandle, self::FILE_ID_LENGTH * $numRec)),
                     false
                 );
 
@@ -471,95 +473,89 @@ class Root extends Manifest
                 continue;
             }
 
-            if (!isset($this->blockCache[$blockId])) {
-                // We haven't read this block yet. Do so, and cache it.
-                $fileDataIds = [];
-                $nameHashes  = [];
+            // We haven't read this block yet. Do so, and cache it.
+            $fileDataIds = [];
+            $nameHashes  = [];
 
 
-                // Read the file ID deltas.
-                $deltas = SplFixedArray::fromArray(
-                    unpack('i*', fread($this->fileHandle, self::FILE_ID_LENGTH * $numRec)),
-                    false
-                );
+            // Read the file ID deltas.
+            $deltas = SplFixedArray::fromArray(
+                unpack('l*', fread($this->fileHandle, self::FILE_ID_LENGTH * $numRec)),
+                false
+            );
 
-                if ($this->useOldRecordFormat) {
-                    // Legacy format: each record is a content hash and a name hash.
-                    $recLength = static::CONTENT_HASH_LENGTH + static::NAME_HASH_LENGTH;
+            if ($this->useOldRecordFormat) {
+                // Legacy format: each record is a content hash and a name hash.
+                $recLength = static::CONTENT_HASH_LENGTH + static::NAME_HASH_LENGTH;
 
-                    $prevId = -1;
-                    for ($chunkOffset = 0; $chunkOffset < $numRec; $chunkOffset += $chunkSize) {
-                        $chunkSize = min(static::CHUNK_RECORD_COUNT, $numRec - $chunkOffset);
+                $prevId = -1;
+                for ($chunkOffset = 0; $chunkOffset < $numRec; $chunkOffset += $chunkSize) {
+                    $chunkSize = min(static::CHUNK_RECORD_COUNT, $numRec - $chunkOffset);
 
-                        $data = SplFixedArray::fromArray(
-                            str_split(
-                                fread($this->fileHandle, $recLength * $chunkSize),
-                                $recLength
-                            ),
-                            false
-                        );
-                        for ($pos = 0; $pos < $chunkSize; $pos++) {
-                            [$contentKey, $nameHash] = str_split($data[$pos], 16);
+                    $data = SplFixedArray::fromArray(
+                        str_split(
+                            fread($this->fileHandle, $recLength * $chunkSize),
+                            $recLength
+                        ),
+                        false
+                    );
+                    for ($pos = 0; $pos < $chunkSize; $pos++) {
+                        [$contentKey, $nameHash] = str_split($data[$pos], 16);
 
-                            $prevId          = $deltas[$chunkOffset + $pos] + $prevId + 1;
-                            $result[$prevId] = [
-                                'nameHash'    => bin2hex(strrev($nameHash)),
-                                'contentHash' => bin2hex($contentKey),
-                                'encrypted'   => $encryptedContentFlagBlock,
-                            ];
-                        }
-                        unset($data);
+                        $prevId = $deltas[$chunkOffset + $pos] + $prevId + 1;
+
+                        $result[$prevId] = [
+                            'nameHash'    => bin2hex(strrev($nameHash)),
+                            'contentHash' => bin2hex($contentKey),
+                            'encrypted'   => $encryptedContentFlagBlock,
+                        ];
                     }
-                } else {
-                    // Modern format: a list of content hashes, and then a list of name hashes (if flagged with such).
-                    $prevId = -1;
-                    for ($chunkOffset = 0; $chunkOffset < $numRec; $chunkOffset += $chunkSize) {
-                        $chunkSize = min(static::CHUNK_RECORD_COUNT, $numRec - $chunkOffset);
+                    unset($data);
+                }
+            } else {
+                // Modern format: a list of content hashes, and then a list of name hashes (if flagged with such).
+                $prevId = -1;
+                for ($chunkOffset = 0; $chunkOffset < $numRec; $chunkOffset += $chunkSize) {
+                    $chunkSize = min(static::CHUNK_RECORD_COUNT, $numRec - $chunkOffset);
 
-                        $data = SplFixedArray::fromArray(
-                            str_split(
-                                fread($this->fileHandle, self::CONTENT_HASH_LENGTH * $chunkSize),
-                                self::CONTENT_HASH_LENGTH
-                            ),
-                            false
-                        );
-                        for ($pos = 0; $pos < $chunkSize; $pos++) {
-                            $contentKey      = $data[$pos];
-                            $prevId          = $deltas[$chunkOffset + $pos] + $prevId + 1;
-                            $result[$prevId]['contentHash'] = bin2hex($contentKey);
-                            $result[$prevId]['encrypted']   = $encryptedContentFlagBlock;
-                        }
-                        unset($data);
+                    $data = SplFixedArray::fromArray(
+                        str_split(
+                            fread($this->fileHandle, self::CONTENT_HASH_LENGTH * $chunkSize),
+                            self::CONTENT_HASH_LENGTH
+                        ),
+                        false
+                    );
+                    for ($pos = 0; $pos < $chunkSize; $pos++) {
+                        $contentKey                     = $data[$pos];
+                        $prevId                         = $deltas[$chunkOffset + $pos] + $prevId + 1;
+                        $result[$prevId]['contentHash'] = bin2hex($contentKey);
+                        $result[$prevId]['encrypted']   = $encryptedContentFlagBlock;
                     }
-
-                    if ($blockHasNameHashes) {
-                        $prevId = -1;
-                        for ($chunkOffset = 0; $chunkOffset < $numRec; $chunkOffset += $chunkSize) {
-                            $chunkSize = min(static::CHUNK_RECORD_COUNT, $numRec - $chunkOffset);
-
-                            $data = SplFixedArray::fromArray(
-                                str_split(
-                                    fread($this->fileHandle, self::NAME_HASH_LENGTH * $chunkSize),
-                                    self::NAME_HASH_LENGTH
-                                ),
-                                false
-                            );
-                            for ($pos = 0; $pos < $chunkSize; $pos++) {
-                                $prevId = $deltas[$chunkOffset + $pos] + $prevId + 1;
-                                $result[$prevId]['nameHash'] = bin2hex(strrev($data[$pos]));
-                            }
-                            unset($data);
-                        }
-                    }
+                    unset($data);
                 }
 
-                unset($deltas);
-                $this->blockCache[$blockId] = [$fileDataIds, $nameHashes];
-            } else {
-                // We can get the data from our block cache. Do that, and skip ahead to the next block.
-                [$fileDataIds, $nameHashes] = $this->blockCache[$blockId];
-                fseek($this->fileHandle, $blockDataLength, SEEK_CUR);
+                if ($blockHasNameHashes) {
+                    $prevId = -1;
+                    for ($chunkOffset = 0; $chunkOffset < $numRec; $chunkOffset += $chunkSize) {
+                        $chunkSize = min(static::CHUNK_RECORD_COUNT, $numRec - $chunkOffset);
+
+                        $data = SplFixedArray::fromArray(
+                            str_split(
+                                fread($this->fileHandle, self::NAME_HASH_LENGTH * $chunkSize),
+                                self::NAME_HASH_LENGTH
+                            ),
+                            false
+                        );
+                        for ($pos = 0; $pos < $chunkSize; $pos++) {
+                            $prevId                      = $deltas[$chunkOffset + $pos] + $prevId + 1;
+                            $result[$prevId]['nameHash'] = bin2hex(strrev($data[$pos]));
+                        }
+                        unset($data);
+                    }
+                }
             }
+
+            unset($deltas);
         }
 
         return $result;
